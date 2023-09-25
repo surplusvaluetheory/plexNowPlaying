@@ -10,7 +10,7 @@ $env:EnvFile = '.\.env'
 $env = Get-Content -Path $env:EnvFile | ConvertFrom-StringData
 
 # Initialize logging function
-function Log-Message {
+function Write-LogMessage {
     param (
         [string]$Message,
         [string]$Level = "INFO"
@@ -19,19 +19,19 @@ function Log-Message {
     Write-Host "[$timestamp] [$Level] $Message"
 }
 
-# Function to fetch current title, year, and director from Plex for a specific user
+# Function to fetch current title, year, director, and first 5 actors from Plex for a specific user
 function GetCurrentTitleFromPlex {
     $PlexToken = $env.PlexToken
     $PlexUrl = $env.PlexUrl
     $desiredUser = $env.DesiredUser
 
     $headers = @{
-        "Accept" = "application/json"
+        "Accept" = "application/xml"
         "X-Plex-Token" = $PlexToken
     }
 
     try {
-        $PlexResponse = Invoke-RestMethod -Uri "$PlexUrl/status/sessions" -Headers @{ 'X-Plex-Token' = $PlexToken }
+        $PlexResponse = Invoke-RestMethod -Uri "$PlexUrl/status/sessions" -Headers $headers -Method Get
 
         $userSession = $PlexResponse.MediaContainer.Video | Where-Object {
             $_.User.title -eq $desiredUser
@@ -41,17 +41,24 @@ function GetCurrentTitleFromPlex {
             $title = $userSession.title
             $year = $userSession.year
             $director = $userSession.Director.tag
-            return "$title ($year) Directed by: $director"
+            $actors = ($userSession.Role | Select-Object -First 5).tag -join ', '
+
+            if ($actors -ne '') {
+                $actors = "Featuring: " + $actors -replace ',([^,]*)$', ' and$1'
+            }
+
+            return "$title ($year) Directed by: $director $actors"
         } else {
-            Log-Message -Message "No media currently playing for user $desiredUser." -Level "ERROR"
+            Write-LogMessage -Message "No media currently playing for user $desiredUser." -Level "ERROR"
             return $null
         }
 
     } catch {
-        Log-Message -Message "Error fetching data from Plex: $_" -Level "ERROR"
+        Write-LogMessage -Message "Error fetching data from Plex: $_" -Level "ERROR"
         return $null
     }
 }
+
 
 # Twitch IRC Configuration
 $server = $env.TwitchServer
@@ -86,12 +93,12 @@ $lastCommandTime = Get-Date -Date "01/01/1970 00:00:00"
 # Main loop to read chat and respond to !np
 while($true) {
     $readData = $reader.ReadLine()
-    Log-Message -Message "Received: $readData" -Level "DEBUG"
+    Write-LogMessage -Message "Received: $readData" -Level "DEBUG"
 
     if ($readData -match "PING :tmi.twitch.tv") {
         $writer.WriteLine("PONG :tmi.twitch.tv")
         $writer.Flush()
-        Log-Message -Message "PONG sent." -Level "DEBUG"
+        Write-LogMessage -Message "PONG sent." -Level "DEBUG"
     }
 
     if ($readData -match ":.*?!np") {
@@ -100,19 +107,20 @@ while($true) {
 
         if ($timeSinceLastCommand.TotalSeconds -ge 30) {
             $currentTitle = GetCurrentTitleFromPlex
-            if ($currentTitle -ne $null) {
+            if ($null -ne $currentTitle) {
                 $response = "PRIVMSG $channel :Now Playing: $currentTitle"
                 $writer.WriteLine($response)
                 $writer.Flush()
-                Log-Message -Message "Sent: $response" -Level "INFO"
-
+                Write-LogMessage -Message "Sent: $response" -Level "INFO"
+            
                 # Update last command time
                 $lastCommandTime = $currentTime
             } else {
-                Log-Message -Message "Couldn't fetch current title from Plex" -Level "ERROR"
+                Write-LogMessage -Message "Couldn't fetch current title from Plex" -Level "ERROR"
             }
+            
         } else {
-            Log-Message -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
+            Write-LogMessage -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
         }
     }
 }
