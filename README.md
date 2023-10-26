@@ -21,14 +21,14 @@ Follow these steps to get the project up and running.
 3. Update the variables with the relevant information:
 
 ```plaintext
-PlexToken=YourPlexToken
-PlexUrl=https://yourplexurl.plex.direct:32400
-DesiredUser=yourplexusername
-TwitchNick=yourTwitchUsername
-TwitchPassword=oauthasdfasddfasdfasdfasdfasdf
-TwitchChannel=#yourtwitchchatchannel
-CooldownInterval=30
-Commands=!np,!nowplaying,!current
+PlexToken=YourPlexToken                         # Your Plex authentication token
+PlexUrl=https://yourplexurl.plex.direct:32400   # Plex server URL
+DesiredUser=yourplexusername                    # The Plex username to fetch the data for
+TwitchNick=yourTwitchUsername                   # Your Twitch username
+TwitchPassword=oauthasdfasddfasdfasdfasdfasdf   # Your Twitch OAuth token
+TwitchChannel=#yourtwitchchatchannel            # The Twitch channel to join
+CooldownInterval=30                             # Cooldown interval (in seconds) between responses to the commands
+Commands=!np,!nowplaying,!current               # The commands that the bot will respond to
 ```
 
 - To get your Plex token, follow the instructions on the [Plex Support page](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
