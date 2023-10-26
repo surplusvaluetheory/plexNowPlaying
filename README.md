@@ -21,18 +21,18 @@ Follow these steps to get the project up and running.
 3. Update the variables with the relevant information:
 
 ```plaintext
-PlexToken=YourPlexToken                # Your Plex authentication token
-PlexUrl=https://yourplexurl.plex.direct:32400 # Plex server URL
-DesiredUser=yourplexusername            # The Plex username to fetch the data for
-TwitchServer=irc.chat.twitch.tv         # Twitch IRC server
-TwitchPort=6697                         # Twitch IRC port (SSL)
-TwitchNick=yourTwitchUsername           # Your Twitch username
-TwitchPassword=oauthasdfasddfasdfasdfasdfasdf # Your Twitch OAuth token
-TwitchChannel=#yourtwitchchatchannel    # The Twitch channel to join
+PlexToken=YourPlexToken
+PlexUrl=https://yourplexurl.plex.direct:32400
+DesiredUser=yourplexusername
+TwitchNick=yourTwitchUsername
+TwitchPassword=oauthasdfasddfasdfasdfasdfasdf
+TwitchChannel=#yourtwitchchatchannel
+CooldownInterval=30
+Commands=!np,!nowplaying,!current
 ```
 
 - To get your Plex token, follow the instructions on the [Plex Support page](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
-  
+
 - To get your Twitch OAuth token, you can use [Twitch Token Generator](https://twitchtokengenerator.com/).
 
 #### Execution Policy
@@ -57,4 +57,4 @@ After updating the `.env` file and setting the execution policy, run the PowerSh
 .\plexNowPlaying.ps1
 ```
 
-Your bot should now be running, and it will display currently playing Plex titles in the Twitch chat when triggered by the `!np` command.
+Your bot should now be running, and it will display currently playing Plex titles in the Twitch chat when triggered by the `!np` command (or whichever commands you've specified in the .env file).

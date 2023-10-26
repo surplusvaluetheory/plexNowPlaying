@@ -1,9 +1,9 @@
 # Don't forget to set the execution policy.
-# Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+# `Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process`
 # This one is very permissive when run as administrator:
-# set-executionpolicy remotesigned
+# `set-executionpolicy remotesigned`
 # or run this as current user:
-# Set-ExecutionPolicy -Scope CurrentUser remotesigned
+# `Set-ExecutionPolicy -Scope CurrentUser remotesigned`
 
 # Load the .env file
 $env:EnvFile = '.\.env'
@@ -19,7 +19,12 @@ function Write-LogMessage {
     Write-Host "[$timestamp] [$Level] $Message"
 }
 
-# Function to fetch current title, year, director, and first 5 actors from Plex for a specific user
+# Read cooldown value from .env file
+$cooldownInterval = [int]$env.CooldownInterval
+# Read command list from .env file and split by comma
+$commandList = $env.Commands -split ','
+
+# Function to fetch current title, year, director, first 5 actors, current position, and total duration from Plex for a specific user
 function GetCurrentTitleFromPlex {
     $PlexToken = $env.PlexToken
     $PlexUrl = $env.PlexUrl
@@ -40,14 +45,29 @@ function GetCurrentTitleFromPlex {
         if ($null -ne $userSession) {
             $title = $userSession.title
             $year = $userSession.year
-            $director = $userSession.Director.tag
+            $directors = ($userSession.Director | Select-Object -Property tag).tag -join ', '
             $actors = ($userSession.Role | Select-Object -First 5).tag -join ', '
+            $viewOffset = [math]::Round($userSession.viewOffset / 1000)  # In seconds
+            $duration = [math]::Round($userSession.duration / 1000)  # In seconds
 
-            if ($actors -ne '') {
-                $actors = "Featuring: " + $actors -replace ',([^,]*)$', ' and$1'
+            # Convert viewOffset and duration to HH:MM:SS
+            $viewOffsetTime = if ($viewOffset -ge 3600) {
+                (New-TimeSpan -Seconds $viewOffset).ToString("hh\:mm\:ss")
+            } else {
+                (New-TimeSpan -Seconds $viewOffset).ToString("mm\:ss")
             }
 
-            return "$title ($year) Directed by: $director $actors"
+            $durationTime = if ($duration -ge 3600) {
+                (New-TimeSpan -Seconds $duration).ToString("hh\:mm\:ss")
+            } else {
+                (New-TimeSpan -Seconds $duration).ToString("mm\:ss")
+            }
+
+            if ($actors -ne '') {
+                $actors = "Feat: " + $actors -replace ',([^,]*)$', ' and$1'
+            }
+
+            return "$title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
         } else {
             Write-LogMessage -Message "No media currently playing for user $desiredUser." -Level "ERROR"
             return $null
@@ -59,10 +79,9 @@ function GetCurrentTitleFromPlex {
     }
 }
 
-
 # Twitch IRC Configuration
-$server = $env.TwitchServer
-$port = $env.TwitchPort
+$server = "irc.chat.twitch.tv"
+$port = 6697
 $nick = $env.TwitchNick
 $password = $env.TwitchPassword
 
@@ -72,6 +91,11 @@ if ($password -notmatch "^oauth:") {
 }
 
 $channel = $env.TwitchChannel
+
+# Handle '#' in Twitch channel name
+if ($channel -notmatch "^#") {
+    $channel = "#$channel"
+}
 
 # Create TCP Client and connect to Twitch IRC
 $client = New-Object System.Net.Sockets.TcpClient
@@ -101,26 +125,30 @@ while($true) {
         Write-LogMessage -Message "PONG sent." -Level "DEBUG"
     }
 
-    if ($readData -match ":.*?!np") {
-        $currentTime = Get-Date
-        $timeSinceLastCommand = $currentTime - $lastCommandTime
-
-        if ($timeSinceLastCommand.TotalSeconds -ge 30) {
-            $currentTitle = GetCurrentTitleFromPlex
-            if ($null -ne $currentTitle) {
-                $response = "PRIVMSG $channel :Now Playing: $currentTitle"
-                $writer.WriteLine($response)
-                $writer.Flush()
-                Write-LogMessage -Message "Sent: $response" -Level "INFO"
-            
-                # Update last command time
-                $lastCommandTime = $currentTime
+    foreach ($command in $commandList) {
+        if ($readData -match ":.*?$command") {
+            $currentTime = Get-Date
+            $timeSinceLastCommand = $currentTime - $lastCommandTime
+    
+            if ($timeSinceLastCommand.TotalSeconds -ge $cooldownInterval) {
+                $currentTitle = GetCurrentTitleFromPlex
+                if ($null -ne $currentTitle) {
+                    $response = "PRIVMSG $channel :Now Playing: $currentTitle"
+                    $writer.WriteLine($response)
+                    $writer.Flush()
+                    Write-LogMessage -Message "Sent: $response" -Level "INFO"
+                
+                    # Update last command time
+                    $lastCommandTime = $currentTime
+                } else {
+                    Write-LogMessage -Message "Couldn't fetch current title from Plex" -Level "ERROR"
+                }
+                
+                # Break the loop as we have found a match
+                break
             } else {
-                Write-LogMessage -Message "Couldn't fetch current title from Plex" -Level "ERROR"
+                Write-LogMessage -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
             }
-            
-        } else {
-            Write-LogMessage -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
         }
     }
 }
