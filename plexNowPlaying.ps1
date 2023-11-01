@@ -24,7 +24,7 @@ $cooldownInterval = [int]$env.CooldownInterval
 # Read command list from .env file and split by comma
 $commandList = $env.Commands -split ','
 
-# Function to fetch current title, year, director, first 5 actors, current position, and total duration from Plex for a specific user
+# Updated function to fetch current title, year, director, first 5 actors, current position, and total duration from Plex for a specific user
 function GetCurrentTitleFromPlex {
     $PlexToken = $env.PlexToken
     $PlexUrl = $env.PlexUrl
@@ -49,8 +49,11 @@ function GetCurrentTitleFromPlex {
             $actors = ($userSession.Role | Select-Object -First 5).tag -join ', '
             $viewOffset = [math]::Round($userSession.viewOffset / 1000)  # In seconds
             $duration = [math]::Round($userSession.duration / 1000)  # In seconds
+            $mediaType = $userSession.type
+            $showTitle = $userSession.grandparentTitle
+            $season = $userSession.parentIndex
+            $episode = $userSession.index
 
-            # Convert viewOffset and duration to HH:MM:SS
             $viewOffsetTime = if ($viewOffset -ge 3600) {
                 (New-TimeSpan -Seconds $viewOffset).ToString("hh\:mm\:ss")
             } else {
@@ -67,7 +70,11 @@ function GetCurrentTitleFromPlex {
                 $actors = "Feat: " + $actors -replace ',([^,]*)$', ' and$1'
             }
 
-            return "$title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
+            if ($mediaType -eq "episode") {
+                return "$showTitle S$season E$episode - $title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
+            } else {
+                return "$title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
+            }            
         } else {
             Write-LogMessage -Message "No media currently playing for user $desiredUser." -Level "ERROR"
             return $null
@@ -133,21 +140,14 @@ while($true) {
             if ($timeSinceLastCommand.TotalSeconds -ge $cooldownInterval) {
                 $currentTitle = GetCurrentTitleFromPlex
                 if ($null -ne $currentTitle) {
-                    $response = "PRIVMSG $channel :Now Playing: $currentTitle"
+                    $response = "PRIVMSG $channel :$currentTitle"
                     $writer.WriteLine($response)
                     $writer.Flush()
-                    Write-LogMessage -Message "Sent: $response" -Level "INFO"
-                
-                    # Update last command time
-                    $lastCommandTime = $currentTime
-                } else {
-                    Write-LogMessage -Message "Couldn't fetch current title from Plex" -Level "ERROR"
+                    Write-LogMessage -Message "Response sent: $currentTitle" -Level "INFO"
                 }
-                
-                # Break the loop as we have found a match
-                break
+                $lastCommandTime = $currentTime
             } else {
-                Write-LogMessage -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
+                Write-LogMessage -Message "Cooldown active. Skipping command execution." -Level "DEBUG"
             }
         }
     }
