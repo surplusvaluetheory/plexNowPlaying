@@ -28,7 +28,8 @@ TwitchNick=yourTwitchUsername                   # Your Twitch username
 TwitchPassword=oauthasdfasddfasdfasdfasdfasdf   # Your Twitch OAuth token
 TwitchChannel=#yourtwitchchatchannel            # The Twitch channel to join
 CooldownInterval=30                             # Cooldown interval (in seconds) between responses to the commands
-Commands=!np,!nowplaying,!current               # The commands that the bot will respond to
+Commands=!np,!nowplaying                        # The commands that the bot will respond to
+TimerCommands=!current,!time                    # Commands for only display current time and total length
 ```
 
 - To get your Plex token, follow the instructions on the [Plex Support page](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).

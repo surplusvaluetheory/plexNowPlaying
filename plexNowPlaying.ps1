@@ -23,6 +23,7 @@ function Write-LogMessage {
 $cooldownInterval = [int]$env.CooldownInterval
 # Read command list from .env file and split by comma
 $commandList = $env.Commands -split ','
+$timerCommandList = $env.TimerCommands -split ','
 
 # Updated function to fetch current title, year, director, first 5 actors, current position, and total duration from Plex for a specific user
 function GetCurrentTitleFromPlex {
@@ -70,11 +71,24 @@ function GetCurrentTitleFromPlex {
                 $actors = "Feat: " + $actors -replace ',([^,]*)$', ' and$1'
             }
 
+            # Create a hashtable to return multiple values
+            $result = @{
+                Title = $title
+                Year = $year
+                Directors = $directors
+                Actors = $actors
+                ViewOffsetTime = $viewOffsetTime
+                DurationTime = $durationTime
+                FullText = ""
+            }
+
             if ($mediaType -eq "episode") {
-                return "$showTitle S$season E$episode - $title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
+                $result.FullText = "$showTitle S$season E$episode - $title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
             } else {
-                return "$title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
-            }            
+                $result.FullText = "$title ($year) Dir: $directors. $actors ($viewOffsetTime/$durationTime)"
+            }   
+            
+            return $result         
         } else {
             Write-LogMessage -Message "No media currently playing for user $desiredUser." -Level "ERROR"
             return $null
@@ -121,7 +135,7 @@ $writer.Flush()
 # Initialize last command time
 $lastCommandTime = Get-Date -Date "01/01/1970 00:00:00"
 
-# Main loop to read chat and respond to !np
+# Main loop to read chat and respond to commands
 while($true) {
     $readData = $reader.ReadLine()
     Write-LogMessage -Message "Received: $readData" -Level "DEBUG"
@@ -138,16 +152,43 @@ while($true) {
             $timeSinceLastCommand = $currentTime - $lastCommandTime
     
             if ($timeSinceLastCommand.TotalSeconds -ge $cooldownInterval) {
-                $currentTitle = GetCurrentTitleFromPlex
-                if ($null -ne $currentTitle) {
-                    $response = "PRIVMSG $channel :$currentTitle"
+                $currentTitleInfo = GetCurrentTitleFromPlex
+                if ($null -ne $currentTitleInfo) {
+                    $response = "PRIVMSG $channel :$($currentTitleInfo.FullText)"
                     $writer.WriteLine($response)
                     $writer.Flush()
-                    Write-LogMessage -Message "Response sent: $currentTitle" -Level "INFO"
+                    Write-LogMessage -Message "Response sent: $($currentTitleInfo.FullText)" -Level "INFO"
                 }
                 $lastCommandTime = $currentTime
             } else {
                 Write-LogMessage -Message "Cooldown active. Skipping command execution." -Level "DEBUG"
+            }
+        }
+    }
+
+    foreach ($timerCommand in $timerCommandList) {
+        if ($readData -match ":.*?$timerCommand") {
+            $currentTime = Get-Date
+            $timeSinceLastCommand = $currentTime - $lastCommandTime
+    
+            if ($timeSinceLastCommand.TotalSeconds -ge $cooldownInterval) {
+                $currentTitleInfo = GetCurrentTitleFromPlex
+                if ($null -ne $currentTitleInfo) {
+                    $response = "PRIVMSG $channel :$($currentTitleInfo.ViewOffsetTime)/$($currentTitleInfo.DurationTime)"
+                    $writer.WriteLine($response)
+                    $writer.Flush()
+                    Write-LogMessage -Message "Sent: $response" -Level "INFO"
+                
+                    # Update last command time
+                    $lastCommandTime = $currentTime
+                } else {
+                    Write-LogMessage -Message "Couldn't fetch current title from Plex" -Level "ERROR"
+                }
+    
+                # Break the loop as we have found a match
+                break
+            } else {
+                Write-LogMessage -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
             }
         }
     }
