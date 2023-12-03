@@ -25,7 +25,7 @@ $cooldownInterval = [int]$env.CooldownInterval
 $commandList = $env.Commands -split ','
 $timerCommandList = $env.TimerCommands -split ','
 
-# Updated function to fetch current title, year, director, first 5 actors, current position, and total duration from Plex for a specific user
+# Function to fetch current title, year, director, first 5 actors, current position, and total duration from Plex for a specific user
 function GetCurrentTitleFromPlex {
     $PlexToken = $env.PlexToken
     $PlexUrl = $env.PlexUrl
@@ -135,10 +135,16 @@ $writer.Flush()
 # Initialize last command time
 $lastCommandTime = Get-Date -Date "01/01/1970 00:00:00"
 
+# Initialize a flag to indicate if a command was processed
+$commandProcessed = $false
+
 # Main loop to read chat and respond to commands
 while($true) {
     $readData = $reader.ReadLine()
     Write-LogMessage -Message "Received: $readData" -Level "DEBUG"
+
+    # Reset command processed flag at the beginning of each loop
+    $commandProcessed = $false
 
     if ($readData -match "PING :tmi.twitch.tv") {
         $writer.WriteLine("PONG :tmi.twitch.tv")
@@ -147,10 +153,10 @@ while($true) {
     }
 
     foreach ($command in $commandList) {
-        if ($readData -match ":.*?$command") {
+        if ($readData -match ":.*?$command" -and -not $commandProcessed) {
             $currentTime = Get-Date
             $timeSinceLastCommand = $currentTime - $lastCommandTime
-    
+
             if ($timeSinceLastCommand.TotalSeconds -ge $cooldownInterval) {
                 $currentTitleInfo = GetCurrentTitleFromPlex
                 if ($null -ne $currentTitleInfo) {
@@ -158,6 +164,7 @@ while($true) {
                     $writer.WriteLine($response)
                     $writer.Flush()
                     Write-LogMessage -Message "Response sent: $($currentTitleInfo.FullText)" -Level "INFO"
+                    $commandProcessed = $true
                 }
                 $lastCommandTime = $currentTime
             } else {
@@ -167,10 +174,10 @@ while($true) {
     }
 
     foreach ($timerCommand in $timerCommandList) {
-        if ($readData -match ":.*?$timerCommand") {
+        if ($readData -match ":.*?$timerCommand" -and -not $commandProcessed) {
             $currentTime = Get-Date
             $timeSinceLastCommand = $currentTime - $lastCommandTime
-    
+
             if ($timeSinceLastCommand.TotalSeconds -ge $cooldownInterval) {
                 $currentTitleInfo = GetCurrentTitleFromPlex
                 if ($null -ne $currentTitleInfo) {
@@ -178,15 +185,9 @@ while($true) {
                     $writer.WriteLine($response)
                     $writer.Flush()
                     Write-LogMessage -Message "Sent: $response" -Level "INFO"
-                
-                    # Update last command time
-                    $lastCommandTime = $currentTime
-                } else {
-                    Write-LogMessage -Message "Couldn't fetch current title from Plex" -Level "ERROR"
+                    $commandProcessed = $true
                 }
-    
-                # Break the loop as we have found a match
-                break
+                $lastCommandTime = $currentTime
             } else {
                 Write-LogMessage -Message "Cooldown in effect. Skipping command." -Level "DEBUG"
             }
